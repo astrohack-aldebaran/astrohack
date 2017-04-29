@@ -17,8 +17,8 @@ os.chdir('/Users/Laurens_240/Documents/GitHub/astrohack/')
 class Flag(object):
     """ Contains all settings """
     image_width = 64
-    lr = 0.0
-    bool_load = True
+    lr = 1.0e-17
+    bool_load = False
     iters = 100
 
     layer_size = [[64, 64], [30, 30], [13, 13], [5, 5], [1, 1]]
@@ -53,19 +53,39 @@ def data_i(i_start, i_end):
 
     n_inputs = len(info_list)
 
-    for n_i in range(n_inputs):
+    x = []
+    y = []
+    dist = []
+    err = []
+    frac = []
+
+    for n_i in range(i_start, i_end):
         info_i = info_list[n_i]
-        print(info_i)
+        # print(info_i)
 
         name_y = image_folder + info_i[0] +'-g.csv'
 
-        a = open_csv(name_y)
+        im_i = open_csv(name_y)
 
-        print(np.shape(a))
+        shape_i = np.shape(im_i)
 
-        1 / 0
+        frac.append(64/(shape_i[0]))
+
+        # todo bicubic
+        x_i = tf.image.resize_bilinear(np.resize(im_i, new_shape=[1, shape_i[0], shape_i[1], 1 ]), [64, 64])
+        sess = tf.Session()
+        x.append(np.asarray(sess.run(x_i)))
+
+        y.append(info_i[1])
+
+        dist.append(info_i[3])
+        err.append(info_i[2])
 
 
+
+        # 1 / 0
+
+    # x =
 
     #
     #
@@ -73,8 +93,7 @@ def data_i(i_start, i_end):
     #
     # folder2 = 'C:/Users/Laurens_240/Documents/GitHub/astrohack/crop_0/'
     #
-    # x = []
-    # y = []
+
     # for im_i in range(i_start, i_end):
     #     name_x = folder + 'cropped_{}.csv'.format(im_i)
     #     name_y = folder + 'info_{}.csv'.format(im_i)
@@ -96,6 +115,19 @@ def data_i(i_start, i_end):
     # batch_Y = np.reshape(y, (-1, 1, 1, 4))
     #
     # return batch_X, batch_Y
+
+    def flat_reshape(a):
+        return np.reshape(np.asarray(a),newshape=(-1, 1, 1, 1))
+
+
+    x = np.reshape(np.asarray(x), newshape=(-1, 64, 64, 1))
+    y = flat_reshape(y)
+    dist = flat_reshape(dist)
+    err = flat_reshape(err)
+    frac =flat_reshape(frac)
+
+    return x, y, dist, err, frac
+
 
 def train_data():
     return data_i(0, 40)
@@ -226,17 +258,18 @@ def main():
     # input X: 28x28 grayscale images, the first dimension (None) will index the images in the mini-batch
     X = tf.placeholder(tf.float32, [None, flag.image_width, flag.image_width, 1], name = 'X')
     d_place = tf.placeholder(tf.float32, [None, 1, 1, 1], name = 'd')
+    frac_place = tf.placeholder(tf.float32, [None, 1, 1, 1], name='wheight')
 
     net = Network(flag)
     net.build_Y(X)
 
     Y = net.get_Y()
 
-    x_fc = tf.concat([Y, tf.log(d_place)], axis= 3)
+    x_fc = tf.concat([Y, tf.log(d_place), tf.log(frac_place)], axis= 3)
 
     def foo():
         # weight init
-        shape = [1, 1, 2, 1]
+        shape = [1, 1, 3, 1]
         stddev = np.sqrt(2 / (shape[0] * shape[1] * shape[2] +
                               shape[0] * shape[1] * shape[3]))
         initial = tf.truncated_normal(shape, stddev=stddev)
@@ -311,19 +344,21 @@ def main():
     sess.run(init)
 
     # TODO own x/y
-    batch_X, batch_Y = train_data()
-    batch_X_te, batch_Y_te = test_data()
+    # x, y, dist, err, frac
+    batch_X, batch_Y, batch_dist, batch_err, batch_frac  = train_data()
+    # batch_X_te, batch_Y_te = test_data()
+    batch_X_te, batch_Y_te, batch_dist_te, batch_err_te, batch_frac_te = test_data()
     # You can call this function in a loop to train the model, 100 images at a time
 
     c_t = []
     c_t_test = []
 
-    def info_foo(x_in, y_in, errM, d):
+    def info_foo(feed_dict):
 
-        [c, y] = sess.run([cost, M_guess], feed_dict={X: x_in, Y_: y_in, errM_: errM, d_place: d})
+        [c, y] = sess.run([cost, M_guess], feed_dict=feed_dict)
 
         y_mean_guess = np.mean(y)
-        y_mean = np.mean(y_in)
+        y_mean = np.mean(feed_dict[Y_])
 
         print('M_true {} M_guess {}'.format(y_mean, y_mean_guess))
 
@@ -339,30 +374,38 @@ def main():
         if update_train_data:
             print('train:')
 
-            batch_Y_mass = batch_Y[:, :, :, 1:2]
+            # batch_Y_mass = batch_Y[:, :, :, 1:2]
+            #
+            # errM = batch_Y[:, :, :, 2:3]
+            #
+            # d= batch_Y[:, :, :, 3:4]
 
-            errM = batch_Y[:, :, :, 2:3]
 
-            d= batch_Y[:, :, :, 3:4]
+            feed_dict = {X: batch_X, Y_: batch_Y, errM_: batch_err,
+                         d_place: batch_dist, frac_place: batch_frac}
 
-            c = info_foo(batch_X, batch_Y_mass, errM, d)
+            c = info_foo(feed_dict)
             c_t.append(c)
 
         if update_test_data:
             print('test:')
 
-            batch_Y_mass_te = batch_Y_te[:, :, :, 1:2]
-            errM_te = batch_Y_te[:, :, :, 2:3]
+            # batch_Y_mass_te = batch_Y_te[:, :, :, 1:2]
+            # errM_te = batch_Y_te[:, :, :, 2:3]
+            #
+            # d_te = batch_Y_te[:, :, :, 3:4]
+            #
+            # c = info_foo(batch_X_te, batch_Y_mass_te, errM_te, d_te)
 
-            d_te = batch_Y_te[:, :, :, 3:4]
+            feed_dict_te = {X: batch_X_te, Y_: batch_Y_te, errM_: batch_err_te,
+                         d_place: batch_dist_te, frac_place: batch_frac_te}
 
-            c = info_foo(batch_X_te, batch_Y_mass_te, errM_te, d_te)
+            c = info_foo(feed_dict_te)
 
             c_t_test.append(c)
 
         # the backpropagation training step
-        sess.run(train_step, feed_dict={X: batch_X, Y_: batch_Y_mass, errM_: errM, d_place: d})
-
+        sess.run(train_step, feed_dict=feed_dict)
 
 
     # folder_weights = "C:\Users\Laurens_240\Documents\GitHub\astrohack\cnn\tmp"
