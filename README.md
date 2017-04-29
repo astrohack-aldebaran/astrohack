@@ -3,6 +3,7 @@ Code for astrohack Hackaton - Aldebaran team
 Members:
 - Bart De Maesschalck
 - Laurens Meeus (Infelane)
+- Seiji Kumagai
 
 In this hackathon we will try to detect the stellar masses, the total amount of mass in stars, of set of consisting 10000 to 100000 galaxies.
 https://astrohack.org/hackathon/
