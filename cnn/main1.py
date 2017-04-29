@@ -5,6 +5,7 @@ import tensorflowvisu
 from tensorflow.contrib.learn.python.learn.datasets.mnist import read_data_sets
 tf.set_random_seed(0)
 import matplotlib.pyplot as plt
+import csv
 
 # OWN libraries
 from foo_funcs import *
@@ -16,7 +17,7 @@ os.chdir('/Users/Laurens_240/Documents/GitHub/astrohack/')
 class Flag(object):
     """ Contains all settings """
     image_width = 64
-    lr = 1.0e-6
+    lr = 0.0
     bool_load = True
     iters = 100
 
@@ -26,36 +27,75 @@ class Flag(object):
     layer_types = ['convstride', 'convstride', 'convstride', 'conv']
 
 
+def open_info(name):
+    sample_list = []
+
+    with open(name, 'r') as csvfile:
+        reader = csv.reader(csvfile, delimiter=';', quotechar='|')
+        next(reader, None)
+        for row in reader:
+            row_i = [row[0] , np.float32(row[1]), np.float32(row[2]), np.float32(row[3])]
+            sample_list.append(row_i)
+
+    # remove header
+    return sample_list
+
+
 def data_i(i_start, i_end):
-    folder = 'C:/Users/Laurens_240/Documents/GitHub/astrohack/crop_0/'
+    folder_info = 'C:/Users/Laurens_240/Desktop/astrohack/Data/Sample/'
+    name_info = folder_info + 'sample.csv'
 
-    x = []
-    y = []
-    for im_i in range(i_start, i_end):
-        name_x = folder + 'cropped_{}.csv'.format(im_i)
-        name_y = folder + 'info_{}.csv'.format(im_i)
+    image_folder = folder_info + 'Sample_Data/Sample_Data/SAMPLE/'
 
-        x.append(open_csv(name_x))
+    # C:\Users\Laurens_240\Desktop\astrohack\Data\Sample\Sample_Data.zip\Sample_Data\SAMPLE
 
-        y_i = open_csv(name_y)
+    info_list = open_info(name_info)
 
-        y.append(y_i)
+    n_inputs = len(info_list)
+
+    for n_i in range(n_inputs):
+        info_i = info_list[n_i]
+        print(info_i)
+
+        name_y = image_folder + info_i[0] +'-g.csv'
+
+        a = open_csv(name_y)
+
+        print(np.shape(a))
+
+        1 / 0
+
 
 
     #
     #
+    # folder = 'C:/Users/Laurens_240/Documents/GitHub/astrohack/crop_0/'
     #
-    # 1/0
-
-    x = np.asarray(x)
-    y = np.asarray(y)
-
-    # n_batch, height, width, depth
-    batch_X = np.reshape(x, (-1, 64, 64, 1))
-    # n_batch, 1, 1, parameters to guess
-    batch_Y = np.reshape(y, (-1, 1, 1, 4))
-
-    return batch_X, batch_Y
+    # folder2 = 'C:/Users/Laurens_240/Documents/GitHub/astrohack/crop_0/'
+    #
+    # x = []
+    # y = []
+    # for im_i in range(i_start, i_end):
+    #     name_x = folder + 'cropped_{}.csv'.format(im_i)
+    #     name_y = folder + 'info_{}.csv'.format(im_i)
+    #
+    #     x.append(open_csv(name_x))
+    #
+    #     y_i = open_csv(name_y)
+    #
+    #     y.append(y_i)
+    #
+    # # 1/0
+    #
+    # x = np.asarray(x)
+    # y = np.asarray(y)
+    #
+    # # n_batch, height, width, depth
+    # batch_X = np.reshape(x, (-1, 64, 64, 1))
+    # # n_batch, 1, 1, parameters to guess
+    # batch_Y = np.reshape(y, (-1, 1, 1, 4))
+    #
+    # return batch_X, batch_Y
 
 def train_data():
     return data_i(0, 40)
@@ -192,7 +232,7 @@ def main():
 
     Y = net.get_Y()
 
-    x_fc = tf.concat([Y, tf.pow(d_place/100, 3.0)], axis= 3)
+    x_fc = tf.concat([Y, tf.log(d_place)], axis= 3)
 
     def foo():
         # weight init
@@ -241,12 +281,11 @@ def main():
     # cost = tf.reduce_mean(tf.divide(tf.squared_difference(1.0, tf.pow(10.0, Y_ - M_guess)),
     #                                 tf.square(ln10 * errM_)), name='cost')
     # todo remove 11!
-    # cost = tf.reduce_mean(tf.divide(tf.squared_difference(1.0, tf.pow(10.0, Y_ - M_guess)),
-    #                                                                 tf.square(ln10 * errM_)), name='cost')
-    # cost = tf.log(cost)
+    cost = tf.reduce_mean(tf.divide(tf.squared_difference(1.0, tf.pow(10.0, Y_ - M_guess)),
+                                                          tf.square(ln10 * errM_)), name='cost')
+    cost = tf.log(cost)
 
-    # cost =  tf.reduce_mean(tf.squared_difference(Y_,M_guess))
-    cost = tf.reduce_mean(tf.squared_difference(Y_, M_guess))
+    # cost = tf.reduce_mean(tf.squared_difference(Y_, M_guess))
 
 
 
