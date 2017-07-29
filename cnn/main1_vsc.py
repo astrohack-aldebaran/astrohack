@@ -17,14 +17,17 @@ from foo_funcs import *
 class Flag(object):
     """ Contains all settings """
     image_width = 64
-    lr = 1.0e-2
+    lr = 1.0e-5
     bool_load = True
-    iters = 10 #100000
+    iters = 1000 #100000
+    iters_per_batch = 1000 # can be high
+    n_batch = 1000 # size of each batch
 
-    layer_size = [[64, 64], [30, 30], [13, 13], [5, 5], [1, 1]]
-    kernel_size = [[5, 5], [5, 5], [4, 4], [5, 5]]
-    kernel_depth = [1, 10, 10, 10, 1]
-    layer_types = ['convstride', 'convstride', 'convstride', 'conv']
+
+    layer_size = [[64, 64], [30, 30], [13, 13], [1, 1]]
+    kernel_size = [[5, 5], [5, 5], [13, 13]]
+    kernel_depth = [1, 20, 10, 5]
+    layer_types = ['convstride', 'convstride', 'conv']
 
 
 def open_info(name):
@@ -34,8 +37,9 @@ def open_info(name):
         reader = csv.reader(csvfile, delimiter=';', quotechar='|')
         next(reader, None)
         for row in reader:
-            row_i = [row[0] , np.float32(row[1]), np.float32(row[2]), np.float32(row[3])]
-            sample_list.append(row_i)
+            if np.float32(row[1]) > -50:
+                row_i = [row[0] , np.float32(row[1]), np.float32(row[2]), np.float32(row[3])]
+                sample_list.append(row_i)
 
     # remove header
     return sample_list
@@ -60,6 +64,8 @@ def test_i(n_inputs = False):
 
 
     info_list = open_info2(name_info)
+
+
 
     if n_inputs:
         ...
@@ -117,7 +123,10 @@ def data_i(i_start, i_end):
 
     info_list = open_info(name_info)
 
-    n_inputs = len(info_list)
+
+
+    n_inputs = len(info_list) #74891 vs 76...
+
 
     x = []
     y = []
@@ -205,7 +214,7 @@ def train_data():
 
 def test_data():
     n_images = 53
-    return data_i(40, n_images)
+    return data_i(500, 1500)
 
 
 def leaky_relu(x, alpha=0., max_value=None):
@@ -224,6 +233,8 @@ def leaky_relu(x, alpha=0., max_value=None):
 class Network(object):
     def __init__(self, flag):
         self.flag = flag
+
+        self.keep_prob = tf.placeholder_with_default(input=1.0, shape=( ), name='keep_prob')
 
     def build_Y(self, X):
 
@@ -264,7 +275,7 @@ class Network(object):
                 # y_i = tf.nn.relu(z_i)
                 #todo leaky relu
                 y_i = leaky_relu(z_i, alpha=0.001)
-                return y_i
+                return tf.nn.dropout(y_i, keep_prob= self.keep_prob)
 
             if layer_type == 'conv':
                 strides = [1, 1, 1, 1]
@@ -339,7 +350,7 @@ def main():
 
     def foo():
         # weight init
-        shape = [1, 1, 3, 1]
+        shape = [1, 1, 7, 1]
         stddev = np.sqrt(2 / (shape[0] * shape[1] * shape[2] +
                               shape[0] * shape[1] * shape[3]))
         initial = tf.truncated_normal(shape, stddev=stddev)
@@ -377,16 +388,24 @@ def main():
 
     ln10 = 2.30258509299
 
-    # cost = tf.reduce_mean(tf.divide(tf.squared_difference(tf.pow(10.0, M_guess), tf.pow(10.0, Y_), name = 'squar_diff'),
-    #                                 tf.square( tf.pow(10.0, Y_)*ln10*errM_)), name= 'cost')
 
-    # todo switch between
-    # cost = tf.reduce_mean(tf.divide(tf.squared_difference(1.0, tf.pow(10.0, Y_ - M_guess)),
-    #                                 tf.square(ln10 * errM_)), name='cost')
-    # todo remove 11!
-    cost = tf.reduce_mean(tf.divide(tf.squared_difference(1.0, tf.pow(10.0, Y_ - M_guess)),
-                                                          tf.square(ln10 * errM_)), name='cost')
-    cost = tf.log(cost)
+    # cost = tf.reduce_mean(tf.square( tf.divide(1.0 - tf.pow(10.0, Y_ - M_guess),
+    #                                                       ln10 * errM_) ), name='cost')
+    # cost = tf.log(cost)
+
+    cost = tf.reduce_mean(tf.divide(tf.squared_difference(M_guess, Y_), errM_))
+
+    regularizer2= 0
+    for param in net.params:
+        if param[0] == 'W':
+            # regularizer1 = regularizer1 + tflearn.losses.L1(self.params[param])
+            regularizer2 = regularizer2 + tf.reduce_mean(tf.square(net.params[param]))
+
+    # beta1 = 1.0e-5
+    beta2 = 1.0e-1
+
+    cost_mean_list = (cost, beta2 * regularizer2)
+    cost_tot = cost_mean_list[0] + cost_mean_list[1]
 
     # cost = tf.reduce_mean(tf.squared_difference(Y_, M_guess))
 
@@ -397,9 +416,8 @@ def main():
     # correct_prediction = tf.equal(tf.argmax(M_guess, 1), tf.argmax(Y_, 1))
     # accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-    # training, learning rate = 0.005
-    # train_step = tf.train.GradientDescentOptimizer(0.005).minimize(cross_entropy)
-    train_step = tf.train.GradientDescentOptimizer(flag.lr).minimize(cost)
+
+    train_step = tf.train.AdamOptimizer(flag.lr).minimize(cost_tot)
 
     # matplotlib visualisation
     # allweights = tf.reshape(W, [-1])
@@ -413,19 +431,13 @@ def main():
     sess = tf.Session()
     sess.run(init)
 
-    # TODO own x/y
-    # x, y, dist, err, frac
-    batch_X, batch_Y, batch_dist, batch_err, batch_frac  = train_data()
-    # batch_X_te, batch_Y_te = test_data()
-    batch_X_te, batch_Y_te, batch_dist_te, batch_err_te, batch_frac_te = test_data()
-    # You can call this function in a loop to train the model, 100 images at a time
 
-    c_t = []
-    c_t_test = []
+    # c_t = []
+    # c_t_test = []
 
     def info_foo(feed_dict):
 
-        [c, y] = sess.run([cost, M_guess], feed_dict=feed_dict)
+        [c, y] = sess.run([cost_mean_list, M_guess], feed_dict=feed_dict)
 
         y_mean_guess = np.mean(y)
         y_mean = np.mean(feed_dict[Y_])
@@ -455,7 +467,7 @@ def main():
                          d_place: batch_dist, frac_place: batch_frac}
 
             c = info_foo(feed_dict)
-            c_t.append(c)
+            # c_t.append(c)
 
         if update_test_data:
             print('test:')
@@ -472,9 +484,10 @@ def main():
 
             c = info_foo(feed_dict_te)
 
-            c_t_test.append(c)
+            # c_t_test.append(c)
 
         # the backpropagation training step
+        feed_dict.update({net.keep_prob: 0.9})
         sess.run(train_step, feed_dict=feed_dict)
 
 
@@ -487,12 +500,35 @@ def main():
         print(ckpt.model_checkpoint_path)
         net.saver.restore(sess, ckpt.model_checkpoint_path)
 
+    batch_X_te, batch_Y_te, batch_dist_te, batch_err_te, batch_frac_te = test_data()
+    n_tot = 74891
     for i in range(flag.iters):
-        training_step(i, update_test_data = True, update_train_data = True)
 
-        # if i%50 == 0:
-        #     save_path = net.saver.save(sess, folder_weights+"model.ckpt", global_step=i)
-        #     print("Model saved in file: %s" % save_path)
+
+        n_batch = flag.n_batch
+
+        n_sub_iters = int(np.floor(n_tot/n_batch))
+
+        #n_sub_iters = 1
+        for batch_i in range(n_sub_iters):
+            # TODO own x/y
+            # x, y, dist, err, frac
+
+            batch_X, batch_Y, batch_dist, batch_err, batch_frac = \
+                data_i(batch_i * n_batch, (batch_i+1) * n_batch)
+
+             # train_data()
+            # batch_X_te, batch_Y_te = test_data()
+            # You can call this function in a loop to train the model, 100 images at a time
+
+            ipb = flag.iters_per_batch
+            for ii in range(ipb):
+                training_step(i * n_sub_iters * ipb + batch_i * ipb + ii,
+                              update_test_data = True, update_train_data = True)
+
+            # if i%50 == 0:
+            save_path = net.saver.save(sess, folder_weights+"model.ckpt", global_step=i * n_sub_iters + batch_i)
+            print("Model saved in file: %s" % save_path)
 
     save_path = net.saver.save(sess, folder_weights + "model.ckpt", global_step=i)
     print("Model saved in file: %s" % save_path)
